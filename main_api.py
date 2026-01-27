@@ -16,17 +16,19 @@ face_service = FaceService()
 UPLOAD_DIR = "temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+from services.pdf_utils import get_pdf_first_page_image
+
 @app.post("/verify")
 async def verify_document(file: UploadFile = File(...)):
     """
-    Upload an Aadhaar or PAN card image to extract data and verify.
+    Upload an Aadhaar or PAN card image or PDF to extract data and verify.
     """
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image.")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".pdf"]:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
     # Unique filename to avoid collisions
     file_id = str(uuid.uuid4())
-    ext = os.path.splitext(file.filename)[1]
     temp_path = os.path.join(UPLOAD_DIR, f"{file_id}{ext}")
 
     try:
@@ -34,14 +36,21 @@ async def verify_document(file: UploadFile = File(...)):
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Read file for face detection (using bytes)
-        with open(temp_path, "rb") as f:
-            image_bytes = f.read()
+        # 1. Prepare image for face detection
+        if ext == ".pdf":
+            try:
+                image_bytes = get_pdf_first_page_image(temp_path)
+            except Exception as e:
+                # Fallback or error if first page extraction fails
+                return JSONResponse(status_code=400, content={"status": "error", "message": f"Failed to extract image from PDF: {str(e)}"})
+        else:
+            with open(temp_path, "rb") as f:
+                image_bytes = f.read()
 
-        # 1. Face Detection
+        # 2. Face Detection
         face_score, num_faces = face_service.detect_face(image_bytes)
 
-        # 2. OCR and Data Extraction
+        # 3. OCR and Data Extraction (PaddleOCR handles PDF directly)
         ocr_result = ocr_service.extract_data(temp_path)
 
         # Build response
@@ -53,12 +62,13 @@ async def verify_document(file: UploadFile = File(...)):
                 "faces_detected": num_faces
             },
             "overall_verification": {
-                "is_valid_document": ocr_result["document_score"] > 0.6 and face_score > 0.5,
-                "confidence_score": (ocr_result["document_score"] + face_score) / 2
+                "is_valid_document": ocr_result.get("document_score", 0) > 0.6 and face_score > 0.5,
+                "confidence_score": (ocr_result.get("document_score", 0) + face_score) / 2
             }
         }
 
         return JSONResponse(content=response_data)
+
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})

@@ -19,8 +19,10 @@ class BaseParser:
         invalid_words = [
             "INDIA", "GOVT", "GOVERNMENT", "DOB", "YEAR", "FATHER", "MALE", "FEMALE", 
             "THE", "INCOME", "TAX", "DEPARTMENT", "SIGNATURE", "ADDRESS", "UNIQUE", 
-            "IDENTIFICATION", "AUTHORITY", "DEPARTMENT", "REPUBLIC", "VIDYAPEETH"
+            "IDENTIFICATION", "AUTHORITY", "DEPARTMENT", "REPUBLIC", "VIDYAPEETH",
+            "ISSUE", "DATE", "VALID", "ONLY", "DOWNLOAD"
         ]
+
         if any(word in text for word in invalid_words):
             return False
         return True

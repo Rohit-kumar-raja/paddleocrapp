@@ -2,17 +2,25 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
-from paddleocr import PPStructureV3
 from typing import List, Dict, Any
+
+# Disable model hoster connectivity check (avoids slow startup)
+os.environ["DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
 
 class TableExtractionService:
     def __init__(self):
-        # Initialize PaddleStructure for table recognition
-        from paddleocr import PPStructureV3
-        self.table_engine = PPStructureV3()
+        # Lazy initialization — engine loads on first use, not at startup
+        self._table_engine = None
 
-
-
+    @property
+    def table_engine(self):
+        """Load PPStructureV3 only when first needed."""
+        if self._table_engine is None:
+            print("Loading PPStructureV3 (first use — this may take a moment)...")
+            from paddleocr import PPStructureV3
+            self._table_engine = PPStructureV3()
+        return self._table_engine
 
     def extract_table_data(self, file_path: str, target_columns: List[str] = None) -> List[Dict[str, Any]]:
         """

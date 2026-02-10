@@ -1,11 +1,15 @@
 import os
 import re
+
+# Fix PaddlePaddle 3.3.0 PIR/OneDNN crash on CPU
+os.environ["FLAGS_enable_pir_api"] = "0"
+os.environ["FLAGS_use_mkldnn"] = "0"
+# Disable model hoster connectivity check
+os.environ["DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
 from paddleocr import PaddleOCR
 from services.parsers.pan_parser import PANParser
 from services.parsers.aadhaar_parser import AadhaarParser
-
-# Disable model hoster connectivity check
-os.environ["DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
 class OCRService:
     def __init__(self):

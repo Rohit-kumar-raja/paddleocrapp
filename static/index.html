@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Document Verification & Extraction</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                            900: '#4c1d95',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Alpine.js for lightweight reactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Heroicons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-800 antialiased bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" x-data="documentApp()">
+
+    <!-- Header -->
+    <header class="glass-panel sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="bg-brand-600 p-2 rounded-lg text-white">
+                <i data-lucide="scan-line" class="w-6 h-6"></i>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight gradient-text">LensAI Extractor</h1>
+        </div>
+        <div class="flex items-center gap-4 text-sm font-medium text-slate-500">
+            <span class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> API System Online</span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Column: Input Form -->
+        <div class="lg:col-span-4 space-y-6">
+            
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-500 to-blue-500"></div>
+                
+                <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                    <i data-lucide="file-up" class="w-5 h-5 text-brand-600"></i>
+                    Upload Document
+                </h2>
+
+                <form @submit.prevent="submitTask" class="space-y-5">
+                    
+                    <!-- Document Type Selector -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Document Type</label>
+                        <select x-model="docType" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-brand-500 focus:border-brand-500 block p-3 transition-colors cursor-pointer outline-none">
+                            <option value="" disabled>Select a capability...</option>
+                            <optgroup label="Identity Verification">
+                                <option value="aadhaar">Aadhaar Card</option>
+                                <option value="pan">PAN Card</option>
+                            </optgroup>
+                            <optgroup label="Financial Extraction">
+                                <option value="bank_statement">Bank Statement</option>
+                                <option value="loan_document">Loan Document</option>
+                                <option value="financial_document">Company Financials</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <!-- File Upload Component -->
+                    <div x-show="docType" x-transition.opacity.duration.300ms>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Source File</label>
+                        <div class="flex items-center justify-center w-full">
+                            <label for="dropzone-file" class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors relative group">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <i data-lucide="upload-cloud" class="w-8 h-8 mb-3 text-slate-400 group-hover:text-brand-500 transition-colors"></i>
+                                    <p class="mb-1 text-sm text-slate-500" x-text="fileName ? fileName : 'Click to upload or drag and drop'"></p>
+                                    <p class="text-xs text-slate-400" x-show="!fileName">PDF, PNG, JPG (Max 10MB)</p>
+                                </div>
+                                <input id="dropzone-file" type="file" class="hidden" @change="handleFileChange($event)" accept=".pdf, .png, .jpg, .jpeg" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Fields based on Type -->
+                    <div x-show="docType" class="space-y-4 fade-in" x-transition>
+                        
+                        <!-- Common base fields for Financial Docs -->
+                        <template x-if="['bank_statement', 'loan_document', 'financial_document'].includes(docType)">
+                            <div class="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Required Context</h3>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Account Name</label>
+                                    <input type="text" x-model="formData.account_name" class="w-full text-sm border-slate-200 rounded-lg p-2 focus:ring-brand-500 focus:border-brand-500 outline-none border" placeholder="e.g. Acme Corp">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Account Number</label>
+                                    <input type="text" x-model="formData.account_number" class="w-full text-sm border-slate-200 rounded-lg p-2 focus:ring-brand-500 focus:border-brand-500 outline-none border" placeholder="e.g. 1234567890">
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Bank Statement specific -->
+                        <template x-if="docType === 'bank_statement'">
+                            <div class="space-y-4 fade-in">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Bank Name</label>
+                                    <input type="text" x-model="formData.bank_name" class="w-full text-sm border-slate-200 rounded-lg p-2 focus:ring-brand-500 outline-none border" placeholder="e.g. HDFC Bank">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Declared Tenure (Months)</label>
+                                    <input type="number" x-model="formData.tenure_months" class="w-full text-sm border-slate-200 rounded-lg p-2 focus:ring-brand-500 outline-none border">
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Loan specific -->
+                        <template x-if="docType === 'loan_document'">
+                            <div class="space-y-4 fade-in">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Institute Name</label>
+                                    <input type="text" x-model="formData.institute_name" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Loan Tenure (Months)</label>
+                                    <input type="number" x-model="formData.tenure_months" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Financials specific -->
+                        <template x-if="docType === 'financial_document'">
+                            <div class="space-y-4 fade-in">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Institute / Company Name</label>
+                                    <input type="text" x-model="formData.institute_name" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-slate-600 mb-1">Tenure Period</label>
+                                        <input type="text" x-model="formData.tenure" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border" placeholder="e.g. FY24">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-slate-600 mb-1">Doc Type</label>
+                                        <select x-model="formData.financial_doc_type" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border bg-white">
+                                            <option value="balance_sheet">Balance Sheet</option>
+                                            <option value="stock_statement">Stock Statement</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <!-- Aadhaar specific matching -->
+                        <template x-if="docType === 'aadhaar'">
+                            <div class="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Aadhaar Validation (Optional)</h3>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Match Name</label>
+                                    <input type="text" x-model="formData.name" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Match Date of Birth (YYYY-MM-DD)</label>
+                                    <input type="text" x-model="formData.dob" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Match Address</label>
+                                    <textarea x-model="formData.address" rows="2" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Selfie Photo for Face Match</label>
+                                    <input type="file" @change="handlePhotoChange($event)" accept=".jpg, .jpeg, .png" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- PAN specific matching -->
+                        <template x-if="docType === 'pan'">
+                            <div class="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">PAN Validation (Optional)</h3>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Match Name</label>
+                                    <input type="text" x-model="formData.name" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Match Date of Birth (YYYY-MM-DD)</label>
+                                    <input type="text" x-model="formData.dob" class="w-full text-sm border-slate-200 rounded-lg p-2 outline-none border">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Selfie Photo for Face Match</label>
+                                    <input type="file" @change="handlePhotoChange($event)" accept=".jpg, .jpeg, .png" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+                                </div>
+                            </div>
+                        </template>
+
+                        <button type="submit" :disabled="isProcessing || !file" class="w-full mt-4 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-all shadow-md hover:shadow-lg flex justify-center items-center gap-2">
+                            <span x-show="!isProcessing">Execute Extraction</span>
+                            <span x-show="isProcessing" class="flex items-center gap-2">
+                                <i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Processing...
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Global Error Banner -->
+            <div x-show="errorMsg" x-transition class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl shadow-sm text-sm text-red-700 flex flex-col gap-1">
+                <div class="flex items-center gap-2 font-bold"><i data-lucide="alert-circle" class="w-4 h-4"></i> Error</div>
+                <span x-text="errorMsg"></span>
+            </div>
+        </div>
+
+        <!-- Right Column: Results Display -->
+        <div class="lg:col-span-8 flex flex-col h-full">
+            <div class="glass-panel rounded-2xl p-0 flex flex-col h-[800px] overflow-hidden relative">
+                
+                <!-- Status Bar inside Results -->
+                <div class="bg-white/50 border-b border-slate-200 px-6 py-4 flex justify-between items-center backdrop-blur-md">
+                    <h3 class="font-bold flex items-center gap-2 text-slate-700">
+                        <i data-lucide="terminal" class="w-5 h-5 text-slate-400"></i>
+                        Analysis Output
+                    </h3>
+                    
+                    <!-- Async Polling Indicator -->
+                    <div x-show="isPolling" class="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold border border-blue-200 animate-pulse">
+                        <i data-lucide="refresh-cw" class="w-3 h-3 animate-spin"></i>
+                        Polling Async Queue (ID: <span x-text="jobId.substring(0,6) + '...'"></span>)
+                    </div>
+                    
+                    <button x-show="resultData" @click="resultData = null; docType = ''; file = null; fileName=''; photo = null" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                        Clear Results
+                    </button>
+                </div>
+
+                <!-- Empty State -->
+                <div x-show="!resultData && !isProcessing" class="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center bg-slate-50/50">
+                    <i data-lucide="scan-line" class="w-16 h-16 mb-4 opacity-20"></i>
+                    <p class="text-lg font-medium text-slate-500 mb-2">Awaiting Input</p>
+                    <p class="text-sm max-w-sm">Select a document type and upload a file to begin the AI extraction and verification process.</p>
+                </div>
+
+                <!-- Processing Skeleton State -->
+                <div x-show="isProcessing && !isPolling" class="flex-1 p-8 space-y-6">
+                    <div class="animate-pulse flex space-x-4">
+                        <div class="flex-1 space-y-4 py-1">
+                            <div class="h-4 bg-slate-200 rounded w-3/4"></div>
+                            <div class="space-y-2">
+                                <div class="h-4 bg-slate-200 rounded"></div>
+                                <div class="h-4 bg-slate-200 rounded w-5/6"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-center p-10"><div class="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div></div>
+                </div>
+
+                <!-- Result Payload UI -->
+                <div x-show="resultData" x-transition.opacity class="flex-1 overflow-y-auto p-6 bg-slate-50/50 custom-scrollbar fade-in relative" id="result-container">
+                    
+                    <!-- Top Status Badge -->
+                    <div class="mb-6 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span :class="{'bg-green-100 text-green-700 border-green-200': resultData?.api_status === 'success' || resultData?.status === 'success', 'bg-red-100 text-red-700 border-red-200': resultData?.api_status === 'failed' || resultData?.status === 'error'}" class="px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider flex items-center gap-1">
+                                <i :data-lucide="(resultData?.api_status === 'success' || resultData?.status === 'success') ? 'check-circle' : 'x-circle'" class="w-3 h-3"></i>
+                                <span x-text="resultData?.api_status || resultData?.status"></span>
+                            </span>
+                            <span x-show="resultData?.document_type" class="bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold font-mono" x-text="resultData.document_type"></span>
+                        </div>
+                    </div>
+
+                    <!-- Metric Cards Row (Dynamically populated based on what exists) -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        
+                        <!-- Overall Score Card (Aadhaar/PAN) -->
+                        <template x-if="resultData?.verification_scores?.overall_score !== undefined">
+                            <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase">Match Confidence</span>
+                                <div class="mt-2 flex items-baseline gap-1">
+                                    <span class="text-2xl font-bold" :class="resultData.verification_scores.overall_score > 0.6 ? 'text-green-600' : 'text-red-600'" x-text="(resultData.verification_scores.overall_score * 100).toFixed(0) + '%'"></span>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Financial Summary Cards -->
+                        <template x-if="resultData?.statement_summary?.avg_monthly_credit !== undefined">
+                            <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                                <span class="text-xs font-semibold text-slate-500 uppercase">Avg Credit</span>
+                                <div class="mt-2 text-xl font-bold text-slate-800" x-text="'₹' + resultData.statement_summary.avg_monthly_credit.toLocaleString()"></div>
+                            </div>
+                        </template>
+                        <template x-if="resultData?.statement_summary?.avg_monthly_debit !== undefined">
+                            <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                                <span class="text-xs font-semibold text-slate-500 uppercase">Avg Debit</span>
+                                <div class="mt-2 text-xl font-bold text-slate-800" x-text="'₹' + resultData.statement_summary.avg_monthly_debit.toLocaleString()"></div>
+                            </div>
+                        </template>
+
+                        <!-- Loan Cards -->
+                        <template x-if="resultData?.loan_summary?.repayment_discipline_score !== undefined">
+                             <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                                <span class="text-xs font-semibold text-slate-500 uppercase">Discipline Score</span>
+                                <div class="mt-2 flex items-baseline gap-1">
+                                    <span class="text-2xl font-bold text-brand-600" x-text="resultData.loan_summary.repayment_discipline_score"></span>
+                                    <span class="text-sm text-slate-400">/ 100</span>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Financial Metric Cards -->
+                        <template x-if="resultData?.financial_metrics?.working_capital !== undefined">
+                            <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                                <span class="text-xs font-semibold text-slate-500 uppercase">Working Capital</span>
+                                <div class="mt-2 text-lg font-bold text-slate-800 truncate" x-text="'₹' + resultData.financial_metrics.working_capital.toLocaleString()"></div>
+                            </div>
+                        </template>
+                        <template x-if="resultData?.financial_metrics?.current_ratio !== undefined">
+                            <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm" :class="resultData.financial_metrics.current_ratio >= 1 ? 'border-b-4 border-b-green-400' : 'border-b-4 border-b-red-400'">
+                                <span class="text-xs font-semibold text-slate-500 uppercase">Current Ratio</span>
+                                <div class="mt-2 text-2xl font-bold text-slate-800" x-text="resultData.financial_metrics.current_ratio"></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Layout Grid for Sections -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <!-- Extracted Data Section (Used mainly by Aadhaar/PAN) -->
+                        <template x-if="resultData?.extracted_data">
+                            <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 font-semibold text-sm text-slate-700 flex items-center gap-2">
+                                    <i data-lucide="database" class="w-4 h-4"></i> OCR Extraction
+                                </div>
+                                <div class="p-0">
+                                    <table class="w-full text-sm text-left">
+                                        <tbody class="divide-y divide-slate-100">
+                                            <template x-for="(value, key) in resultData.extracted_data" :key="key">
+                                                <tr class="hover:bg-slate-50 transition-colors">
+                                                    <td class="px-4 py-3 font-medium text-slate-500 capitalize" x-text="key.replace('_', ' ')"></td>
+                                                    <td class="px-4 py-3 text-slate-800 font-mono" x-text="value || '-'"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Validation Results Section -->
+                        <template x-if="resultData?.validation_result || resultData?.verification_scores">
+                            <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 font-semibold text-sm text-slate-700 flex items-center gap-2">
+                                    <i data-lucide="shield-check" class="w-4 h-4 text-green-600"></i> Verification & Matching
+                                </div>
+                                <div class="p-0">
+                                    <table class="w-full text-sm text-left">
+                                        <tbody class="divide-y divide-slate-100">
+                                            <template x-for="(value, key) in (resultData.validation_result || resultData.verification_scores)" :key="key">
+                                                <tr class="hover:bg-slate-50 transition-colors">
+                                                    <td class="px-4 py-3 font-medium text-slate-500 capitalize" x-text="key.replace(/_/g, ' ')"></td>
+                                                    <td class="px-4 py-3">
+                                                        <template x-if="typeof value === 'boolean'">
+                                                             <span :class="value ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'" class="px-2 py-0.5 rounded text-xs font-semibold uppercase" x-text="value ? 'Pass' : 'Fail'"></span>
+                                                        </template>
+                                                        <template x-if="typeof value !== 'boolean'">
+                                                             <span class="text-slate-800 font-mono font-semibold" x-text="typeof value === 'number' && key.includes('score') ? (value*100).toFixed(0)+'%' : value"></span>
+                                                        </template>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </template>
+
+                         <!-- Risk Analysis Section -->
+                         <template x-if="resultData?.risk_analysis || resultData?.risk_indicators">
+                            <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm md:col-span-2">
+                                <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 font-semibold text-sm text-slate-700 flex items-center gap-2">
+                                    <i data-lucide="activity" class="w-4 h-4 text-orange-500"></i> Risk & Behaviour Metrics
+                                </div>
+                                <div class="p-4 flex flex-wrap gap-4">
+                                     <template x-for="(value, key) in (resultData.risk_analysis || resultData.risk_indicators)" :key="key">
+                                        <div class="bg-slate-50 border border-slate-100 rounded-lg p-3 flex-1 min-w-[150px]">
+                                            <div class="text-xs text-slate-500 uppercase font-semibold mb-1 truncate" x-text="key.replace(/_/g, ' ')"></div>
+                                            
+                                            <!-- Handle Array case (like risk_flags) -->
+                                            <template x-if="Array.isArray(value)">
+                                                <div class="flex flex-wrap gap-1 mt-1">
+                                                    <template x-for="item in value">
+                                                         <span class="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-medium" x-text="item"></span>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                            
+                                            <!-- Standard value -->
+                                            <template x-if="!Array.isArray(value)">
+                                                <div class="font-bold text-slate-800" x-text="value"></div>
+                                            </template>
+                                        </div>
+                                     </template>
+                                </div>
+                            </div>
+                        </template>
+                        
+                    </div>
+                     
+                    <!-- Raw JSON Viewer Accordion -->
+                    <div class="mt-6 border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm" x-data="{ open: false }">
+                        <button @click="open = !open" class="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100 text-left text-sm font-semibold text-slate-700 flex justify-between items-center transition-colors">
+                            <div class="flex items-center gap-2"><i data-lucide="code" class="w-4 h-4"></i> View Raw Technical API Response</div>
+                            <i data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <div x-show="open" x-collapse>
+                            <div class="p-4 bg-slate-900 text-green-400 font-mono text-xs overflow-x-auto">
+                                <pre x-text="JSON.stringify(resultData, null, 2)"></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function documentApp() {
+            return {
+                docType: '',
+                file: null,
+                fileName: '',
+                photo: null,
+                isProcessing: false,
+                isPolling: false,
+                jobId: null,
+                errorMsg: null,
+                resultData: null,
+                
+                // Form DTO
+                formData: {
+                    account_name: '',
+                    account_number: '',
+                    bank_name: '',
+                    tenure_months: '',
+                    institute_name: '',
+                    tenure: '',
+                    financial_doc_type: 'balance_sheet',
+                    name: '',
+                    dob: '',
+                    address: ''
+                },
+
+                init() {
+                    // Re-render icons on Alpine updates
+                    this.$watch('resultData', () => {
+                        this.$nextTick(() => { lucide.createIcons(); });
+                    });
+                     this.$watch('isPolling', () => {
+                        this.$nextTick(() => { lucide.createIcons(); });
+                    });
+                },
+
+                handleFileChange(event) {
+                    const fileInput = event.target;
+                    if (fileInput.files.length > 0) {
+                        this.file = fileInput.files[0];
+                        this.fileName = this.file.name;
+                        this.errorMsg = null;
+                    }
+                },
+
+                handlePhotoChange(event) {
+                    const fileInput = event.target;
+                    if (fileInput.files.length > 0) {
+                        this.photo = fileInput.files[0];
+                    }
+                },
+
+                async submitTask() {
+                    if (!this.file || !this.docType) return;
+                    
+                    this.isProcessing = true;
+                    this.errorMsg = null;
+                    this.resultData = null;
+                    this.jobId = null;
+                    this.isPolling = false;
+
+                    const formData = new FormData();
+                    formData.append('file', this.file);
+
+                    try {
+                        let endpoint = '';
+
+                        // Branching logic based on doc type endpoints
+                        if (this.docType === 'aadhaar') {
+                            endpoint = '/verify/aadhaar';
+                            if (this.formData.name) formData.append('name', this.formData.name);
+                            if (this.formData.dob) formData.append('dob', this.formData.dob);
+                            if (this.formData.address) formData.append('address', this.formData.address);
+                            if (this.photo) formData.append('photo', this.photo);
+                        } 
+                        else if (this.docType === 'pan') {
+                            endpoint = '/verify/pan';
+                            if (this.formData.name) formData.append('name', this.formData.name);
+                            if (this.formData.dob) formData.append('dob', this.formData.dob);
+                            if (this.photo) formData.append('photo', this.photo);
+                        } 
+                        else if (['bank_statement', 'loan_document', 'financial_document'].includes(this.docType)) {
+                            // These funnel into the async /extract queue
+                            endpoint = '/extract';
+                            formData.append('extract_type', this.docType);
+                            formData.append('account_name', this.formData.account_name);
+                            formData.append('account_number', this.formData.account_number);
+                            
+                            if (this.docType === 'bank_statement') {
+                                formData.append('bank_name', this.formData.bank_name);
+                                formData.append('tenure_months', this.formData.tenure_months);
+                            } else if (this.docType === 'loan_document') {
+                                formData.append('institute_name', this.formData.institute_name);
+                                formData.append('tenure_months', this.formData.tenure_months);
+                            } else if (this.docType === 'financial_document') {
+                                formData.append('institute_name', this.formData.institute_name);
+                                formData.append('tenure', this.formData.tenure);
+                                formData.append('doc_type', this.formData.financial_doc_type);
+                            }
+                        }
+
+                        console.log(`Sending to ${endpoint}...`);
+                        
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(result.detail || result.message || 'Server returned an error');
+                        }
+
+                        // Determine if we need to poll async
+                        if (endpoint === '/extract') {
+                            this.jobId = result.job_id;
+                            this.startPolling();
+                        } else {
+                            // Synchronous (Aadhaar/PAN)
+                            this.resultData = result;
+                            this.isProcessing = false;
+                        }
+
+                    } catch (error) {
+                        console.error('API Error:', error);
+                        this.errorMsg = error.message.replace(/_/g, ' ');
+                        this.isProcessing = false;
+                    }
+                },
+
+                async startPolling() {
+                    this.isPolling = true;
+                    
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const res = await fetch(`/extract/status/${this.jobId}`);
+                            const data = await res.json();
+                            
+                            if (res.status === 200) {
+                                if (data.job_status === 'completed' || data.job_status === 'failed') {
+                                    clearInterval(pollInterval);
+                                    this.resultData = data;
+                                    this.isPolling = false;
+                                    this.isProcessing = false;
+                                }
+                                // If 'created' or 'in_progress', do nothing and wait for next tick
+                            } else {
+                                clearInterval(pollInterval);
+                                throw new Error(data.detail || data.failed_message || 'Failed to poll status');
+                            }
+                        } catch (err) {
+                            clearInterval(pollInterval);
+                            this.errorMsg = err.message;
+                            this.isPolling = false;
+                            this.isProcessing = false;
+                        }
+                    }, 2000); // poll every 2 seconds
+                }
+            }
+        }
+
+        // Initialize icons on first load
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
